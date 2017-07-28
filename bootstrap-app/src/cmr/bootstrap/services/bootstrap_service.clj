@@ -15,6 +15,24 @@
     [cmr.indexer.system :as indexer-system]
     [cmr.transmit.index-set :as index-set]))
 
+(def request-type->dispatcher
+  "A map of request types to which dispatcher to use for asynchronous requests."
+  {:migrate-provider :core-async-dispatcher
+   :migrate-collection :core-async-dispatcher
+   :index-provider :core-async-dispatcher
+   :index-data-later-than-date-time :core-async-dispatcher
+   :index-collection :core-async-dispatcher
+   :index-system-concepts :core-async-dispatcher
+   :index-concepts-by-id :core-async-dispatcher
+   :delete-concepts-from-index-by-id :core-async-dispatcher
+   :bootstrap-virtual-products :core-async-dispatcher})
+
+(defn- get-dispatcher
+  "Returns the correct dispatcher to use based on the system configuration and the request."
+  [context synchronous request-type]
+  (if synchronous
+    (get-in context [:system :synchronous-dispatcher])
+    (get-in context [:system (request-type->dispatcher request-type)])))
 
 (defn migrate-provider
   "Copy all the data for a provider (including collections and graunules) from catalog rest
@@ -103,9 +121,9 @@
     (bulk/index-concepts-by-id (:system context) provider-id concept-type concept-ids)
     (let [channel (get-in context [:system :concept-id-channel])]
       (info "Adding bulk index request to concept-id channel.")
-      (go (>! channel {:provider-id provider-id 
-                       :concept-type concept-type 
-                       :request :index 
+      (go (>! channel {:provider-id provider-id
+                       :concept-type concept-type
+                       :request :index
                        :concept-ids concept-ids})))))
 
 (defn delete-concepts-from-index-by-id
@@ -115,7 +133,7 @@
     (bulk/delete-concepts-by-id (:system context) provider-id concept-type concept-ids)
     (let [channel (get-in context [:system :concept-id-channel])]
       (info "Adding bulk delete reqeust to concept-id channel.")
-      (go (>! channel {:provider-id provider-id 
+      (go (>! channel {:provider-id provider-id
                        :concept-type concept-type
                        :request :delete
                        :concept-ids concept-ids})))))
@@ -187,8 +205,6 @@
 
   ;; Remove all granules from small collections for this collection.
   (rebalance-util/delete-collection-granules-from-small-collections context concept-id))
-
-
 
 (defn rebalance-status
   "Returns a map of counts of granules in the collection in metadata db, the small collections index,
